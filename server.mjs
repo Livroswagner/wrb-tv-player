@@ -36,7 +36,7 @@ const server = http.createServer(async (req, res) => {
   const urlPath = req.url.split('?')[0];
 
   // API Route
-  if (urlPath === '/.netlify/functions/api' || urlPath === '/api') {
+  if (urlPath === '/.netlify/functions/api' || urlPath === '/api' || urlPath.startsWith('/api')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {

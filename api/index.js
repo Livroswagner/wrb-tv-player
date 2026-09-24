@@ -1,35 +1,26 @@
-export const config = {
-  runtime: 'edge', // Vercel Edge Serverless Function (Ultra-rápido, sem cold starts)
-};
+export default async function handler(req, res) {
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-export default async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "access-control-allow-origin": "*",
-        "access-control-allow-methods": "GET, POST, OPTIONS",
-        "access-control-allow-headers": "Content-Type",
-      },
-    });
+    return res.status(204).end();
   }
 
   if (req.method !== "POST") {
-    return Response.json({ error: "Método não permitido." }, { status: 405 });
+    return res.status(405).json({ error: "Método não permitido." });
   }
 
-  let b;
-  try {
-    b = await req.json();
-  } catch {
-    return Response.json({ error: "JSON inválido." }, { status: 400 });
+  let b = req.body;
+  if (typeof b === "string") {
+    try {
+      b = JSON.parse(b);
+    } catch {
+      return res.status(400).json({ error: "JSON inválido." });
+    }
   }
-
-  const jsonHeaders = {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "access-control-allow-origin": "*"
-  };
+  b = b || {};
 
   try {
     const server = String(b.server || "").replace(/\/+$/, "");
@@ -54,10 +45,10 @@ export default async (req) => {
       }
     }
 
-    // 1. LOGIN & INICIALIZAÇÃO RÁPIDA (Retorna categorias instantaneamente)
+    // 1. LOGIN & CATEGORIAS RÁPIDAS
     if (b.action === "login") {
       if (!/^https?:\/\//i.test(server) || !u || !p) {
-        return Response.json({ error: "Servidor, usuário e senha são obrigatórios." }, { status: 400 });
+        return res.status(400).json({ error: "Servidor, usuário e senha são obrigatórios." });
       }
 
       const authR = await fetch(base, {
@@ -66,22 +57,21 @@ export default async (req) => {
       });
 
       if (!authR.ok) {
-        return Response.json({ error: `Servidor respondeu HTTP ${authR.status} ao validar o acesso.` }, { status: 502 });
+        return res.status(502).json({ error: `Servidor respondeu HTTP ${authR.status} ao validar o acesso.` });
       }
 
       const auth = await authR.json();
       if (Number(auth?.user_info?.auth) !== 1) {
-        return Response.json({ auth: false, error: auth?.user_info?.message || "Usuário ou senha inválidos." }, { status: 401 });
+        return res.status(401).json({ auth: false, error: auth?.user_info?.message || "Usuário ou senha inválidos." });
       }
 
-      // Baixa apenas as categorias de cada tipo em paralelo (Super Rápido!)
       const [liveCats, vodCats, seriesCats] = await Promise.all([
         fetchXtream("action=get_live_categories"),
         fetchXtream("action=get_vod_categories"),
         fetchXtream("action=get_series_categories")
       ]);
 
-      return Response.json({
+      return res.status(200).json({
         auth: true,
         userInfo: auth.user_info,
         serverInfo: auth.server_info,
@@ -90,10 +80,10 @@ export default async (req) => {
           movies: Array.isArray(vodCats) ? vodCats : [],
           series: Array.isArray(seriesCats) ? seriesCats : []
         }
-      }, { headers: jsonHeaders });
+      });
     }
 
-    // 2. BUSCAR ITENS DE UMA CATEGORIA ESPECÍFICA (Lazy Loading)
+    // 2. BUSCAR CONTEÚDO DE UMA CATEGORIA
     if (b.action === "get_category_streams") {
       const catId = b.categoryId != null ? String(b.categoryId) : "";
       const type = b.type || "live";
@@ -145,16 +135,15 @@ export default async (req) => {
         }
       }
 
-      return Response.json({ success: true, items: formatted }, { headers: jsonHeaders });
+      return res.status(200).json({ success: true, items: formatted });
     }
 
-    // 3. DETALHES DE UMA SÉRIE (Temporadas e Episódios)
+    // 3. DETALHES DE UMA SÉRIE
     if (b.action === "get_series_info") {
       const seriesId = b.seriesId;
-      if (!seriesId) return Response.json({ error: "ID da série é obrigatório." }, { status: 400 });
+      if (!seriesId) return res.status(400).json({ error: "ID da série é obrigatório." });
 
       const info = await fetchXtream(`action=get_series_info&series_id=${encodeURIComponent(seriesId)}`);
-
       const seasonsData = info.seasons || [];
       const episodesData = info.episodes || {};
       const formattedEpisodes = {};
@@ -172,18 +161,18 @@ export default async (req) => {
         }
       }
 
-      return Response.json({
+      return res.status(200).json({
         success: true,
         info: info.info || {},
         seasons: seasonsData,
         episodes: formattedEpisodes
-      }, { headers: jsonHeaders });
+      });
     }
 
     // 4. M3U PLAYLIST PROXY
     if (b.action === "m3u") {
       const url = String(b.url || "").trim();
-      if (!/^https?:\/\//i.test(url)) return Response.json({ error: "URL M3U inválida." }, { status: 400 });
+      if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: "URL M3U inválida." });
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -196,19 +185,19 @@ export default async (req) => {
           }
         });
         clearTimeout(timeoutId);
-        if (!r.ok) return Response.json({ error: `O servidor respondeu HTTP ${r.status} ao solicitar a playlist.` }, { status: 502 });
+        if (!r.ok) return res.status(502).json({ error: `O servidor respondeu HTTP ${r.status} ao solicitar a playlist.` });
         const text = await r.text();
-        return Response.json({ text }, { headers: jsonHeaders });
+        return res.status(200).json({ text });
       } catch (fetchErr) {
         if (fetchErr.name === "AbortError") {
-          return Response.json({ error: "Tempo esgotado ao baixar a lista M3U (servidor remoto muito lento ou offline)." }, { status: 504 });
+          return res.status(504).json({ error: "Tempo esgotado ao baixar a lista M3U." });
         }
         throw fetchErr;
       }
     }
 
-    return Response.json({ error: "Ação inválida." }, { status: 400 });
+    return res.status(400).json({ error: "Ação inválida." });
   } catch (e) {
-    return Response.json({ error: "Falha de rede: " + (e?.message || "erro") }, { status: 502 });
+    return res.status(502).json({ error: "Falha de rede: " + (e?.message || "erro") });
   }
-};
+}
