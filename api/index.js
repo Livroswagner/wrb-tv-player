@@ -77,7 +77,13 @@ export default async function handler(req, res) {
       const authR = await smartFetch(base);
 
       if (!authR.ok) {
-        return res.status(502).json({ error: `Servidor respondeu HTTP ${authR.status} ao validar o acesso.` });
+        const errText = await authR.text().catch(() => "");
+        return res.status(502).json({
+          error: `Servidor respondeu HTTP ${authR.status} ao validar o acesso.`,
+          serverHeader: authR.headers.get("server"),
+          cfRay: authR.headers.get("cf-ray"),
+          preview: errText.substring(0, 200)
+        });
       }
 
       const auth = await authR.json();
