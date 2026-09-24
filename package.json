@@ -1,0 +1,10 @@
+{
+  "name": "wrb-tv-player",
+  "version": "1.0.0",
+  "description": "WRB-TV Obsidian Cinema Web Player",
+  "main": "server.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
