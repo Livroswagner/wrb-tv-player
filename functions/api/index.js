@@ -228,13 +228,24 @@ export async function onRequestPost(context) {
   }
 }
 
+function ipToDomain(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    if (/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(u.hostname)) {
+      u.hostname = u.hostname + '.sslip.io';
+      return u.href;
+    }
+  } catch {}
+  return urlStr;
+}
+
 export async function handleStreamProxy(request) {
   if (request.method === "OPTIONS") {
     return onRequestOptions();
   }
 
   const reqUrl = new URL(request.url);
-  const target = reqUrl.searchParams.get("url");
+  let target = reqUrl.searchParams.get("url");
   if (!target || !/^https?:\/\//i.test(target)) {
     return new Response("Parâmetro 'url' ausente ou inválido.", {
       status: 400,
@@ -244,6 +255,9 @@ export async function handleStreamProxy(request) {
       }
     });
   }
+
+  // Prevenir bloqueio de IP direto do Cloudflare Workers (Error 1003)
+  target = ipToDomain(target);
 
   const upstreamHeaders = {
     "user-agent": "IPTVSmartersPro/1.0.0",
@@ -256,20 +270,41 @@ export async function handleStreamProxy(request) {
   }
 
   try {
-    const upstream = await fetch(target, {
-      method: request.method === "HEAD" ? "HEAD" : "GET",
-      headers: upstreamHeaders,
-      redirect: "follow",
-    });
+    // Seguir redirecionamentos manualmente para converter destinos com IP direto em .sslip.io
+    let currentUrl = target;
+    let upstream = null;
+
+    for (let hop = 0; hop < 6; hop++) {
+      upstream = await fetch(currentUrl, {
+        method: request.method === "HEAD" ? "HEAD" : "GET",
+        headers: upstreamHeaders,
+        redirect: "manual",
+      });
+
+      if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get("location")) {
+        const loc = upstream.headers.get("location");
+        const resolved = new URL(loc, currentUrl).href;
+        currentUrl = ipToDomain(resolved);
+        continue;
+      }
+      break;
+    }
+
+    if (!upstream) {
+      return new Response("Falha ao obter resposta do servidor upstream.", {
+        status: 502,
+        headers: { "access-control-allow-origin": "*" }
+      });
+    }
 
     const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
-    const isM3u8 = target.toLowerCase().includes(".m3u8") || 
+    const isM3u8 = currentUrl.toLowerCase().includes(".m3u8") || 
                    contentType.includes("mpegurl") || 
                    contentType.includes("application/x-mpegurl");
 
     if (isM3u8 && request.method !== "HEAD") {
       const text = await upstream.text();
-      const baseUrl = upstream.url || target;
+      const baseUrl = currentUrl;
       const origin = reqUrl.origin;
       const proxyBase = `${origin}/api/stream?url=`;
 
@@ -282,7 +317,7 @@ export async function handleStreamProxy(request) {
         if (trimmed.startsWith("#")) {
           return line.replace(/URI="([^"]+)"/g, (match, p1) => {
             try {
-              const abs = new URL(p1, baseUrl).href;
+              const abs = ipToDomain(new URL(p1, baseUrl).href);
               return `URI="${proxyBase}${encodeURIComponent(abs)}"`;
             } catch {
               return match;
@@ -292,7 +327,7 @@ export async function handleStreamProxy(request) {
 
         // Linha de segmento ou de playlist variante
         try {
-          const abs = new URL(trimmed, baseUrl).href;
+          const abs = ipToDomain(new URL(trimmed, baseUrl).href);
           return `${proxyBase}${encodeURIComponent(abs)}`;
         } catch {
           return line;
@@ -333,9 +368,9 @@ export async function handleStreamProxy(request) {
     }
 
     if (!respHeaders.has("content-type")) {
-      if (/\.ts($|\?)/i.test(target)) {
+      if (/\.ts($|\?)/i.test(currentUrl)) {
         respHeaders.set("content-type", "video/mp2t");
-      } else if (/\.mp4($|\?)/i.test(target)) {
+      } else if (/\.mp4($|\?)/i.test(currentUrl)) {
         respHeaders.set("content-type", "video/mp4");
       } else {
         respHeaders.set("content-type", "application/octet-stream");
