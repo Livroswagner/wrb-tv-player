@@ -3,8 +3,10 @@ export async function onRequestOptions() {
     status: 204,
     headers: {
       "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET, POST, OPTIONS",
-      "access-control-allow-headers": "Content-Type",
+      "access-control-allow-methods": "GET, HEAD, POST, OPTIONS",
+      "access-control-allow-headers": "Range, Content-Type, Accept, Authorization",
+      "access-control-expose-headers": "Content-Range, Content-Length, Accept-Ranges",
+      "access-control-max-age": "86400",
     },
   });
 }
@@ -226,12 +228,158 @@ export async function onRequestPost(context) {
   }
 }
 
+export async function handleStreamProxy(request) {
+  if (request.method === "OPTIONS") {
+    return onRequestOptions();
+  }
+
+  const reqUrl = new URL(request.url);
+  const target = reqUrl.searchParams.get("url");
+  if (!target || !/^https?:\/\//i.test(target)) {
+    return new Response("Parâmetro 'url' ausente ou inválido.", {
+      status: 400,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "access-control-allow-origin": "*"
+      }
+    });
+  }
+
+  const upstreamHeaders = {
+    "user-agent": "IPTVSmartersPro/1.0.0",
+    "accept": "*/*",
+  };
+
+  const range = request.headers.get("range");
+  if (range) {
+    upstreamHeaders["range"] = range;
+  }
+
+  try {
+    const upstream = await fetch(target, {
+      method: request.method === "HEAD" ? "HEAD" : "GET",
+      headers: upstreamHeaders,
+      redirect: "follow",
+    });
+
+    const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
+    const isM3u8 = target.toLowerCase().includes(".m3u8") || 
+                   contentType.includes("mpegurl") || 
+                   contentType.includes("application/x-mpegurl");
+
+    if (isM3u8 && request.method !== "HEAD") {
+      const text = await upstream.text();
+      const baseUrl = upstream.url || target;
+      const origin = reqUrl.origin;
+      const proxyBase = `${origin}/api/stream?url=`;
+
+      const lines = text.split(/\r?\n/);
+      const rewrittenLines = lines.map(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return line;
+
+        // Diretivas com URI="..." (#EXT-X-KEY, #EXT-X-MAP, #EXT-X-MEDIA, etc.)
+        if (trimmed.startsWith("#")) {
+          return line.replace(/URI="([^"]+)"/g, (match, p1) => {
+            try {
+              const abs = new URL(p1, baseUrl).href;
+              return `URI="${proxyBase}${encodeURIComponent(abs)}"`;
+            } catch {
+              return match;
+            }
+          });
+        }
+
+        // Linha de segmento ou de playlist variante
+        try {
+          const abs = new URL(trimmed, baseUrl).href;
+          return `${proxyBase}${encodeURIComponent(abs)}`;
+        } catch {
+          return line;
+        }
+      });
+
+      return new Response(rewrittenLines.join("\n"), {
+        status: upstream.status,
+        headers: {
+          "content-type": "application/vnd.apple.mpegurl; charset=utf-8",
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET, HEAD, OPTIONS",
+          "access-control-allow-headers": "*",
+          "cache-control": "no-cache, no-store",
+        }
+      });
+    }
+
+    // Fluxo binário (.ts, .mp4, .mkv, etc.)
+    const respHeaders = new Headers();
+    respHeaders.set("access-control-allow-origin", "*");
+    respHeaders.set("access-control-allow-methods", "GET, HEAD, OPTIONS");
+    respHeaders.set("access-control-allow-headers", "*");
+    respHeaders.set("access-control-expose-headers", "Content-Range, Content-Length, Accept-Ranges");
+
+    const passHeaders = [
+      'content-type',
+      'content-length',
+      'content-range',
+      'accept-ranges',
+      'cache-control',
+      'last-modified',
+      'etag'
+    ];
+    for (const h of passHeaders) {
+      const val = upstream.headers.get(h);
+      if (val) respHeaders.set(h, val);
+    }
+
+    if (!respHeaders.has("content-type")) {
+      if (/\.ts($|\?)/i.test(target)) {
+        respHeaders.set("content-type", "video/mp2t");
+      } else if (/\.mp4($|\?)/i.test(target)) {
+        respHeaders.set("content-type", "video/mp4");
+      } else {
+        respHeaders.set("content-type", "application/octet-stream");
+      }
+    }
+
+    return new Response(request.method === "HEAD" ? null : upstream.body, {
+      status: upstream.status,
+      headers: respHeaders
+    });
+  } catch (err) {
+    return new Response(`Erro ao transmitir fluxo: ${err.message}`, {
+      status: 502,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "access-control-allow-origin": "*"
+      }
+    });
+  }
+}
+
+export async function onRequestGet(context) {
+  return handleStreamProxy(context.request);
+}
+
+export async function onRequestHead(context) {
+  return handleStreamProxy(context.request);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Stream proxy
+    if (url.pathname === "/api/stream" || url.pathname === "/stream" || (url.pathname.startsWith("/api") && url.searchParams.has("url"))) {
+      if (request.method === "OPTIONS") return onRequestOptions();
+      return handleStreamProxy(request);
+    }
+
+    // Xtream Codes / M3U API
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       if (request.method === "OPTIONS") return onRequestOptions();
       if (request.method === "POST") return onRequestPost({ request });
+      if (request.method === "GET") return handleStreamProxy(request);
       return new Response("Method not allowed", { status: 405 });
     }
 

@@ -2,7 +2,8 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import apiHandler from './netlify/functions/api.mjs';
+import { Readable } from 'stream';
+import { onRequestPost, handleStreamProxy } from './functions/api/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,8 +25,9 @@ const MIME_TYPES = {
 const server = http.createServer(async (req, res) => {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept, Authorization');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -35,21 +37,63 @@ const server = http.createServer(async (req, res) => {
 
   const urlPath = req.url.split('?')[0];
 
-  // API Route
+  // Stream Proxy Route
+  if (urlPath === '/api/stream' || urlPath === '/stream' || (urlPath.startsWith('/api') && req.url.includes('url='))) {
+    try {
+      const fullUrl = `http://localhost:${PORT}${req.url}`;
+      const forwardHeaders = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (value) forwardHeaders.set(key, Array.isArray(value) ? value.join(', ') : value);
+      }
+      const whatwgReq = new Request(fullUrl, {
+        method: req.method,
+        headers: forwardHeaders
+      });
+      const response = await handleStreamProxy(whatwgReq);
+
+      const respHeaders = {};
+      for (const [k, v] of response.headers.entries()) {
+        respHeaders[k] = v;
+      }
+      res.writeHead(response.status, respHeaders);
+
+      if (response.body && req.method !== 'HEAD') {
+        Readable.fromWeb(response.body).pipe(res);
+      } else {
+        res.end();
+      }
+    } catch (err) {
+      console.error('Stream Proxy Error:', err);
+      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Erro no proxy de stream: ' + err.message);
+    }
+    return;
+  }
+
+  // API Route (POST Xtream Codes)
   if (urlPath === '/.netlify/functions/api' || urlPath === '/api' || urlPath.startsWith('/api')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const fakeReq = {
+        const fullUrl = `http://localhost:${PORT}${req.url}`;
+        const forwardHeaders = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value) forwardHeaders.set(key, Array.isArray(value) ? value.join(', ') : value);
+        }
+        const whatwgReq = new Request(fullUrl, {
           method: req.method,
-          json: async () => JSON.parse(body || '{}')
-        };
-        const response = await apiHandler(fakeReq);
-        const data = await response.text();
-        res.writeHead(response.status, {
-          'Content-Type': 'application/json; charset=utf-8'
+          headers: forwardHeaders,
+          body: req.method === 'POST' ? body : undefined
         });
+
+        const response = await onRequestPost({ request: whatwgReq });
+        const data = await response.text();
+        const respHeaders = {};
+        for (const [k, v] of response.headers.entries()) {
+          respHeaders[k] = v;
+        }
+        res.writeHead(response.status, respHeaders);
         res.end(data);
       } catch (err) {
         console.error('API Error:', err);
