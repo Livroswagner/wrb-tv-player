@@ -28,17 +28,40 @@ export default async function handler(req, res) {
     const p = String(b.pass || "");
     const base = `${server}/player_api.php?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
 
+    const userAgents = [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "IPTVSmartersPro/1.0.0",
+      "VLC/3.0.18 LibVLC/3.0.18"
+    ];
+
+    async function smartFetch(url) {
+      for (const ua of userAgents) {
+        try {
+          const r = await fetch(url, {
+            redirect: "follow",
+            headers: {
+              "user-agent": ua,
+              "accept": "application/json, text/plain, */*",
+              "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+            }
+          });
+          if (r.ok || r.status !== 403) return r;
+        } catch {
+          // tentar próximo UA
+        }
+      }
+      // Se todos falharem com 403, retorna última tentativa padrão
+      return fetch(url, {
+        redirect: "follow",
+        headers: { "user-agent": userAgents[0], "accept": "*/*" }
+      });
+    }
+
     async function fetchXtream(query) {
       const url = `${base}&${query}`;
-      const r = await fetch(url, {
-        redirect: "follow",
-        headers: {
-          "user-agent": "IPTVSmartersPro/1.0.0",
-          "accept": "application/json"
-        }
-      });
-      if (!r.ok) return [];
       try {
+        const r = await smartFetch(url);
+        if (!r.ok) return [];
         return await r.json();
       } catch {
         return [];
@@ -51,10 +74,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Servidor, usuário e senha são obrigatórios." });
       }
 
-      const authR = await fetch(base, {
-        redirect: "follow",
-        headers: { "user-agent": "IPTVSmartersPro/1.0.0", "accept": "application/json" }
-      });
+      const authR = await smartFetch(base);
 
       if (!authR.ok) {
         return res.status(502).json({ error: `Servidor respondeu HTTP ${authR.status} ao validar o acesso.` });
