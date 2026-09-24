@@ -239,6 +239,9 @@ function ipToDomain(urlStr) {
   return urlStr;
 }
 
+const redirectCache = new Map();
+const CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutos
+
 export async function handleStreamProxy(request) {
   if (request.method === "OPTIONS") {
     return onRequestOptions();
@@ -271,7 +274,13 @@ export async function handleStreamProxy(request) {
 
   try {
     // Seguir redirecionamentos manualmente para converter destinos com IP direto em .sslip.io
+    // Utiliza cache de redirecionamento para seeking instantâneo em filmes e séries
     let currentUrl = target;
+    const cachedRedirect = redirectCache.get(target);
+    if (cachedRedirect && (Date.now() - cachedRedirect.time < CACHE_TTL_MS)) {
+      currentUrl = cachedRedirect.url;
+    }
+
     let upstream = null;
 
     for (let hop = 0; hop < 6; hop++) {
@@ -287,7 +296,22 @@ export async function handleStreamProxy(request) {
         currentUrl = ipToDomain(resolved);
         continue;
       }
+
+      // Se falhar e estivesse usando cache expirado, recomeça do target original
+      if ((upstream.status === 403 || upstream.status === 404 || upstream.status === 410) && currentUrl !== target) {
+        redirectCache.delete(target);
+        currentUrl = target;
+        continue;
+      }
       break;
+    }
+
+    if (currentUrl !== target) {
+      redirectCache.set(target, { url: currentUrl, time: Date.now() });
+      if (redirectCache.size > 500) {
+        const firstKey = redirectCache.keys().next().value;
+        redirectCache.delete(firstKey);
+      }
     }
 
     if (!upstream) {

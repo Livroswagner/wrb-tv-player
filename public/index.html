@@ -1206,35 +1206,127 @@
     }
     .resume-toast {
       position: absolute;
-      bottom: 70px;
+      bottom: 125px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(11, 17, 25, 0.95);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 8px 18px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #fff;
+      background: rgba(11, 17, 25, 0.96);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 210, 255, 0.4);
+      border-radius: 14px;
+      padding: 12px 20px;
       display: flex;
       align-items: center;
-      gap: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-      z-index: 20;
+      gap: 16px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.9), 0 0 24px rgba(0, 210, 255, 0.15);
+      z-index: 100;
+      animation: resumeSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes resumeSlideUp {
+      from { opacity: 0; transform: translate(-50%, 20px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+    .resume-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .resume-content {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .resume-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .resume-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .resume-subtitle b {
+      color: var(--primary);
+    }
+    .resume-btns {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .resume-continue-btn {
+      background: var(--primary);
+      color: #06090e;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .resume-continue-btn:hover {
+      transform: scale(1.05);
+      background: #33dcff;
     }
     .resume-restart-btn {
-      background: rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .resume-restart-btn:hover {
+      background: rgba(255,255,255,0.18);
+    }
+    .resume-close-btn {
+      background: transparent;
       border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      line-height: 1;
+    }
+    .resume-close-btn:hover {
+      color: #fff;
+    }
+    .ctrl-btn.next-ep-bar-btn {
+      background: rgba(0, 210, 255, 0.15);
+      border: 1px solid rgba(0, 210, 255, 0.35);
       color: var(--primary);
-      padding: 3px 10px;
-      border-radius: 999px;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .ctrl-btn.next-ep-bar-btn:hover {
+      background: var(--primary);
+      color: #06090e;
+      border-color: var(--primary);
+      transform: scale(1.04);
+    }
+    .floating-next-btn {
+      background: rgba(0, 210, 255, 0.15);
+      border: 1px solid rgba(0, 210, 255, 0.3);
+      color: var(--primary);
+      padding: 4px 10px;
+      border-radius: 6px;
       cursor: pointer;
       font-size: 12px;
       font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 8px;
+      transition: all 0.2s;
     }
-    .resume-restart-btn:hover {
+    .floating-next-btn:hover {
       background: var(--primary);
-      color: #000;
+      color: #06090e;
     }
     .history-del-btn {
       position: absolute;
@@ -1465,6 +1557,9 @@
               <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M19 12H5m7 7l-7-7 7-7"/></svg>
               <span>Voltar</span>
             </button>
+            <button class="floating-next-btn" id="floatingNextEpBtn" title="Próximo Episódio" style="display:none">
+              <span>Próximo EP ⏭</span>
+            </button>
             <div class="floating-header-title">
               <span style="color:var(--primary); font-size:10px;">●</span>
               <span id="floatingMediaTitle">Reproduzindo</span>
@@ -1501,6 +1596,9 @@
               <button class="ctrl-btn play-btn" id="ctrlPlayBtn" title="Play/Pausar (Espaço)">▶</button>
               <button class="ctrl-btn" id="ctrlRewind" title="Voltar 10 segundos">↺ 10s</button>
               <button class="ctrl-btn" id="ctrlForward" title="Avançar 10 segundos">10s ↻</button>
+              <button class="ctrl-btn next-ep-bar-btn" id="ctrlNextEp" title="Próximo Episódio (Shift+N)" style="display:none">
+                <span>Próximo</span> ⏭
+              </button>
               <div class="ctrl-volume-wrap">
                 <button class="ctrl-btn" id="ctrlMute" title="Mudo (M)">🔊</button>
                 <input type="range" class="ctrl-volume-slider" id="ctrlVolume" min="0" max="1" step="0.05" value="1">
@@ -1608,15 +1706,39 @@
       const t = document.createElement('div');
       t.className = 'resume-toast';
       t.innerHTML = `
-        <span>▶ Retomando de <b>${formatTime(sec)}</b></span>
-        <button class="resume-restart-btn">Reiniciar do Início</button>
+        <div class="resume-icon">⏱️</div>
+        <div class="resume-content">
+          <div class="resume-title">Retomar Reprodução</div>
+          <div class="resume-subtitle">Você parou em <b>${formatTime(sec)}</b></div>
+        </div>
+        <div class="resume-btns">
+          <button class="resume-continue-btn" id="resumeContinueBtn">Continuar ▶</button>
+          <button class="resume-restart-btn" id="resumeRestartBtn">Do Início ↺</button>
+        </div>
+        <button class="resume-close-btn" id="resumeCloseBtn" title="Fechar">✕</button>
       `;
       $('player-overlay').appendChild(t);
-      t.querySelector('.resume-restart-btn').onclick = () => {
-        $('mainVideo').currentTime = 0;
+
+      const timer = setTimeout(() => { if (t.parentNode) t.remove(); }, 9000);
+
+      t.querySelector('#resumeContinueBtn').onclick = () => {
+        clearTimeout(timer);
         t.remove();
       };
-      setTimeout(() => t.remove(), 7000);
+      t.querySelector('#resumeRestartBtn').onclick = () => {
+        clearTimeout(timer);
+        const v = $('mainVideo');
+        if (v) {
+          if (typeof v.fastSeek === 'function') v.fastSeek(0);
+          else v.currentTime = 0;
+          v.play().catch(() => {});
+        }
+        t.remove();
+      };
+      t.querySelector('#resumeCloseBtn').onclick = () => {
+        clearTimeout(timer);
+        t.remove();
+      };
     }
 
     // TOAST NOTIFICATIONS
@@ -2213,6 +2335,15 @@
       return rawUrl;
     }
 
+    function updateNextEpisodeButtons(meta) {
+      const hasNext = !!(meta && meta.type === 'series' && (
+        (meta.episodesList && meta.currentEpIdx != null && meta.currentEpIdx + 1 < meta.episodesList.length) ||
+        (meta.allSeasons && meta.seasonsOrder && meta.seasonsOrder.indexOf(String(meta.seasonNum)) + 1 < meta.seasonsOrder.length)
+      ));
+      if ($('ctrlNextEp')) $('ctrlNextEp').style.display = hasNext ? 'inline-flex' : 'none';
+      if ($('floatingNextEpBtn')) $('floatingNextEpBtn').style.display = hasNext ? 'inline-flex' : 'none';
+    }
+
     // CINEMA VIDEO PLAYER ENGINE (COM RETOMADA E HISTÓRICO NETFLIX)
     function playVideo(title, url, fallbackTsUrl, meta = null) {
       const overlay = $('player-overlay');
@@ -2222,6 +2353,7 @@
       overlay.classList.add('show');
       state.currentPlayingMeta = meta;
       showControls();
+      updateNextEpisodeButtons(meta);
 
       // Limpar toast de retomada anterior
       const oldToast = document.querySelector('.resume-toast');
@@ -2280,7 +2412,7 @@
         };
 
         v.addEventListener('timeupdate', () => {
-          if (!v.duration) return;
+          if (!v.duration || isScrubbing) return;
           const pct = Math.min(100, (v.currentTime / v.duration) * 100);
           $('ctrlProgressBar').style.width = `${pct}%`;
           $('ctrlTime').textContent = `${formatTime(v.currentTime)} / ${formatTime(v.duration)}`;
@@ -2493,16 +2625,77 @@
       else v.pause();
     };
 
+    let isScrubbing = false;
+    const progressWrap = $('ctrlProgressWrap');
+
+    function getScrubPos(e) {
+      const rect = progressWrap.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    }
+
+    function doSeek(pos) {
+      const v = $('mainVideo');
+      if (!v || !v.duration) return;
+      pos = Math.max(0, Math.min(1, pos));
+      const targetTime = pos * v.duration;
+      $('ctrlProgressBar').style.width = `${pos * 100}%`;
+      $('ctrlTime').textContent = `${formatTime(targetTime)} / ${formatTime(v.duration)}`;
+      if (typeof v.fastSeek === 'function') {
+        try { v.fastSeek(targetTime); } catch { v.currentTime = targetTime; }
+      } else {
+        v.currentTime = targetTime;
+      }
+    }
+
+    progressWrap.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      isScrubbing = true;
+      const pos = getScrubPos(e);
+      const v = $('mainVideo');
+      if (v && v.duration) {
+        $('ctrlProgressBar').style.width = `${pos * 100}%`;
+        $('ctrlTime').textContent = `${formatTime(pos * v.duration)} / ${formatTime(v.duration)}`;
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isScrubbing) return;
+      const pos = getScrubPos(e);
+      const v = $('mainVideo');
+      if (v && v.duration) {
+        $('ctrlProgressBar').style.width = `${pos * 100}%`;
+        $('ctrlTime').textContent = `${formatTime(pos * v.duration)} / ${formatTime(v.duration)}`;
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (isScrubbing) {
+        isScrubbing = false;
+        const pos = getScrubPos(e);
+        doSeek(pos);
+      }
+    });
+
+    progressWrap.onclick = (e) => {
+      e.stopPropagation();
+      const pos = getScrubPos(e);
+      doSeek(pos);
+    };
+
     $('ctrlRewind').onclick = (e) => {
       e.stopPropagation();
       const v = $('mainVideo');
-      v.currentTime = Math.max(0, v.currentTime - 10);
+      if (!v || !v.duration) return;
+      const targetTime = Math.max(0, v.currentTime - 10);
+      doSeek(targetTime / v.duration);
     };
 
     $('ctrlForward').onclick = (e) => {
       e.stopPropagation();
       const v = $('mainVideo');
-      v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 10);
+      if (!v || !v.duration) return;
+      const targetTime = Math.min(v.duration, v.currentTime + 10);
+      doSeek(targetTime / v.duration);
     };
 
     $('ctrlMute').onclick = (e) => {
@@ -2530,14 +2723,19 @@
       }
     };
 
-    $('ctrlProgressWrap').onclick = (e) => {
-      e.stopPropagation();
-      const v = $('mainVideo');
-      if (!v.duration) return;
-      const rect = $('ctrlProgressWrap').getBoundingClientRect();
-      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      v.currentTime = pos * v.duration;
-    };
+    if ($('ctrlNextEp')) {
+      $('ctrlNextEp').onclick = (e) => {
+        e.stopPropagation();
+        playNextEpisode(state.currentPlayingMeta);
+      };
+    }
+
+    if ($('floatingNextEpBtn')) {
+      $('floatingNextEpBtn').onclick = (e) => {
+        e.stopPropagation();
+        playNextEpisode(state.currentPlayingMeta);
+      };
+    }
 
     // Auto-hide controls & floating header when mouse is inactive and hide cursor
     let ctrlTimer = null;
@@ -2651,6 +2849,9 @@
           e.preventDefault();
         } else if (e.key === 'm') {
           $('ctrlMute').click();
+          e.preventDefault();
+        } else if (e.key === 'n' || e.key === 'N') {
+          playNextEpisode(state.currentPlayingMeta);
           e.preventDefault();
         }
       }
