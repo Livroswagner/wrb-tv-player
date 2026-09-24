@@ -225,3 +225,20 @@ export async function onRequestPost(context) {
     return Response.json({ error: "Falha de rede: " + (e?.message || "erro") }, { status: 502, headers: jsonHeaders });
   }
 }
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+      if (request.method === "OPTIONS") return onRequestOptions();
+      if (request.method === "POST") return onRequestPost({ request });
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    if (env && env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    return new Response("Not found", { status: 404 });
+  }
+};

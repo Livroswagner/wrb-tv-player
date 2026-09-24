@@ -1,1 +1,1 @@
-export { onRequestPost, onRequestOptions } from './api/index.js';
+export { onRequestPost, onRequestOptions, default } from './api/index.js';
